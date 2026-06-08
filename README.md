@@ -518,8 +518,63 @@ run_dashboard()
 ### Kiến Trúc Hệ Thống
 
 ```
-[Vẽ diagram kiến trúc ở đây]
+┌─────────────┐     ┌──────────────┐     ┌──────────────────┐
+│  Task 1-3   │────▶│   Task 4     │────▶│   Task 5-6       │
+│  Data Prep  │     │  Chunk+Embed │     │  Search Modules  │
+│             │     │              │     │  ┌─────────────┐ │
+│ • 3 PDF law │     │ • 62 chunks  │     │  │ Semantic    │ │
+│ • 5 news    │     │ • 384-dim    │     │  │ (cosine)    │ │
+│ • 8 .md     │     │ • MiniLM-L6  │     │  ├─────────────┤ │
+└─────────────┘     └──────────────┘     │  │ Lexical     │ │
+                                          │  │ (BM25)      │ │
+                                          │  └─────────────┘ │
+                                          └────────┬─────────┘
+                                                   │
+                    ┌──────────────────────────────┘
+                    ▼
+          ┌─────────────────┐     ┌──────────────────┐
+          │   Task 7        │     │   Task 8          │
+          │   Reranking     │     │   PageIndex       │
+          │                 │     │   (fallback)      │
+          │ • RRF merge     │     │                   │
+          │ • Diversity     │     │ • API stub        │
+          └────────┬────────┘     └────────┬──────────┘
+                   │                       │
+                   └───────────┬───────────┘
+                               ▼
+                    ┌─────────────────────┐
+                    │   Task 9            │
+                    │   Retrieval Pipeline│
+                    │                     │
+                    │ hybrid → rerank →   │
+                    │ threshold check →   │
+                    │ fallback PageIndex  │
+                    └──────────┬──────────┘
+                               ▼
+                    ┌─────────────────────┐
+                    │   Task 10           │
+                    │   Generation        │
+                    │                     │
+                    │ • Reorder chunks    │
+                    │ • Format context    │
+                    │ • GPT-4o-mini +     │
+                    │   citation prompt   │
+                    └─────────────────────┘
 ```
+
+---
+
+### Tech Stack & Decisions
+
+| Component | Choice | Rationale |
+|-----------|--------|-----------|
+| **Chunking** | Recursive split (custom) | `langchain-text-splitters` not available; self-implemented with `\n\n→\n→.→ ` separators, chunk_size=800, overlap=100 |
+| **Embedding** | `all-MiniLM-L6-v2` (384d) | Lightweight (80MB), fast, already cached; `bge-m3` (2GB) would be better for Vietnamese but needs download |
+| **Lexical Search** | BM25 (custom) | `rank-bm25` not available; implemented from formula with k1=1.5, b=0.75, Unicode-aware Vietnamese tokenizer |
+| **Reranking** | RRF + diversity | Jina API needs key; self-implemented Reciprocal Rank Fusion (Cormack et al. 2009) with k=60, plus diversity filter |
+| **Vector Store** | In-memory + pickle | Weaviate/ChromaDB not available; suits 62-chunk corpus |
+| **LLM** | GPT-4o-mini (OpenAI) | Cheap, fast; requires `OPENAI_API_KEY` in `.env` |
+| **Fallback** | PageIndex stub | Requires `PAGEINDEX_API_KEY`; returns empty list without key |
 
 ---
 
@@ -540,10 +595,21 @@ run_dashboard()
 # Cài đặt dependencies
 pip install -r requirements.txt
 
-# Chạy app
-streamlit run app.py
-# hoặc
-chainlit run app.py
+# Setup environment
+cp .env.example .env
+# Điền OPENAI_API_KEY vào .env (cần cho Task 10)
+
+# Task 1: Tải văn bản pháp luật (tự động fallback nếu ko có mạng)
+python -m src.task1_collect_legal_docs
+
+# Task 3: Convert sang markdown
+python -m src.task3_convert_markdown
+
+# Task 4: Chunk + Embed + Index
+python -m src.task4_chunking_indexing
+
+# Chạy toàn bộ test
+pytest tests/test_individual.py -v
 ```
 
 ---
