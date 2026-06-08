@@ -1,0 +1,26 @@
+# Ca sĩ Long Nhật và Sơn Ngọc Minh bị bắt vì liên quan ma túy
+
+**Source:** https://tienphong.vn/ca-si-long-nhat-va-son-ngoc-minh-bi-bat-vi-lien-quan-ma-tuy-post1844815.tpo
+**Crawled:** 2026-06-08T14:52:06.187029
+
+---
+
+# Ca sĩ Long Nhật và Sơn Ngọc Minh bị bắt vì liên quan ma túy
+
+**Nguồn: Báo Tiền Phong | Ngày: 20/05/2026**
+
+TPO - Công an TPHCM cho biết đã khởi tố, bắt tạm giam ca sĩ Long Nhật và ca sĩ Sơn Ngọc Minh để điều tra về các hành vi liên quan ma túy.
+
+Ngày 20/5, Phòng Cảnh sát điều tra tội phạm về ma túy (PC04) cho biết vừa triệt phá thành công một đường dây ma túy quy mô lớn trên địa bàn, khởi tố và bắt tạm giam 71 bị can về các hành vi "Mua bán trái phép chất ma túy", "Tàng trữ trái phép chất ma túy" và "Tổ chức sử dụng trái phép chất ma túy".
+
+Theo cơ quan điều tra, đây là kết quả từ đợt cao điểm 45 ngày đêm "Tổng rà soát, thống kê, phát hiện, đấu tranh, làm sạch địa bàn", phục vụ mục tiêu xây dựng TPHCM không ma túy vào năm 2030.
+
+Quá trình điều tra các vụ án ma túy xảy ra trong quý I/2026, lực lượng chức năng phát hiện ngoài các đối tượng đã bị xử lý trước đó còn nhiều mắt xích liên quan cần tiếp tục truy xét, mở rộng.
+
+Kết quả bước đầu, công an đã bắt giữ, xử lý 74 người. Trong đó, 71 bị can bị khởi tố, bắt tạm giam; 3 người còn lại bị xử lý hành chính theo quy định.
+
+Đáng chú ý, trong số các đối tượng bị xử lý hình sự có một số trường hợp là người hoạt động trong lĩnh vực nghệ thuật, có ảnh hưởng nhất định trên mạng xã hội và đời sống văn hóa, gồm: ca sĩ Long Nhật (tên thật Đinh Long Nhật, sinh năm 1967) và ca sĩ Sơn Ngọc Minh (sinh năm 1990). Cả 2 đối tượng đều bị khởi tố, bắt tạm giam về tội "Tổ chức sử dụng trái phép chất ma túy".
+
+Long Nhật là ca sĩ nổi tiếng từ thập niên 1990 với dòng nhạc quê hương, trữ tình. Trước đó nhiều năm, Long Nhật từng bị lan truyền thông tin liên quan đến một đường dây mại dâm nam và nghi vấn sử dụng ma túy nhưng đã phủ nhận.
+
+Hiện vụ việc đang được Phòng Cảnh sát điều tra tội phạm về ma túy (PC04) tiếp tục điều tra, xử lý theo quy định pháp luật.
