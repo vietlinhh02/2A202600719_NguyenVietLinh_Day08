@@ -1,158 +1,161 @@
 """
 Task 4 — Chunking & Indexing vào Vector Store.
-
-Hướng dẫn:
-    1. Đọc toàn bộ markdown files từ data/standardized/
-    2. Chọn 1 chunking strategy (giải thích lý do)
-    3. Chọn 1 embedding model (giải thích lý do)
-    4. Index vào vector store (Weaviate khuyến cáo)
-
-Chunking options (langchain-text-splitters):
-    - RecursiveCharacterTextSplitter: an toàn, phổ biến
-    - MarkdownHeaderTextSplitter: tốt cho file có heading
-    - SemanticChunker: dùng embedding để tách (nâng cao)
-
-Embedding model options:
-    - sentence-transformers/all-MiniLM-L6-v2 (384 dim, nhẹ)
-    - BAAI/bge-m3 (1024 dim, multilingual, tốt cho tiếng Việt)
-    - OpenAI text-embedding-3-small (1536 dim, API)
-
-Vector store options:
-    - Weaviate (khuyến cáo: hỗ trợ hybrid search built-in)
-    - ChromaDB (đơn giản, local)
-    - FAISS (chỉ dense search)
-
-Cài đặt:
-    pip install langchain-text-splitters sentence-transformers weaviate-client
 """
-
+import logging
+import pickle
 from pathlib import Path
 
+from sentence_transformers import SentenceTransformer
+
+logger = logging.getLogger(__name__)
+
 STANDARDIZED_DIR = Path(__file__).parent.parent / "data" / "standardized"
-
-
-# =============================================================================
-# CONFIGURATION — Giải thích lựa chọn của bạn trong comment
-# =============================================================================
-
-# TODO: Chọn chunking strategy và giải thích vì sao
-CHUNK_SIZE = 500        # Vì sao chọn 500? ...
-CHUNK_OVERLAP = 50      # Vì sao chọn 50? ...
-CHUNKING_METHOD = "recursive"  # "recursive" | "markdown_header" | "semantic"
-
-# TODO: Chọn embedding model và giải thích
-EMBEDDING_MODEL = "BAAI/bge-m3"  # Vì sao? Multilingual, tốt cho tiếng Việt
-EMBEDDING_DIM = 1024
-
-# TODO: Chọn vector store
-VECTOR_STORE = "weaviate"  # "weaviate" | "chromadb" | "faiss"
-
+INDEX_FILE = Path(__file__).parent.parent / "data" / "index.pkl"
 
 # =============================================================================
-# IMPLEMENTATION
+# CONFIGURATION
 # =============================================================================
+
+# Vì sao chọn CHUNK_SIZE=800: Đủ dài để chứa ngữ cảnh đầy đủ (vài điều luật/đoạn báo),
+#   nhưng không quá dài để tránh diluting embedding quality.
+CHUNK_SIZE = 800
+
+# Vì sao chọn CHUNK_OVERLAP=100: Đảm bảo không mất thông tin ở ranh giới chunk.
+CHUNK_OVERLAP = 100
+
+CHUNKING_METHOD = "recursive"
+
+# Vì sao chọn all-MiniLM-L6-v2: Nhẹ (384 dim), nhanh, phổ biến.
+#   Dùng làm fallback vì bge-m3 cần download 2GB+ qua mạng.
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+EMBEDDING_DIM = 384
+
+VECTOR_STORE = "inmemory"
+
+_embed_model = None
+_indexed_chunks: list[dict] = []
+
+
+def _get_model():
+    global _embed_model
+    if _embed_model is None:
+        _embed_model = SentenceTransformer(EMBEDDING_MODEL)
+    return _embed_model
+
+
+def _recursive_split(text: str, chunk_size: int, overlap: int) -> list[str]:
+    """
+    Splits text on separators in order: paragraphs → lines → sentences → words → chars.
+    Builds chunks of size ≤ chunk_size with overlap between consecutive chunks.
+    """
+    separators = ["\n\n", "\n", ". ", " ", ""]
+    splits = [text]
+
+    for sep in separators:
+        new_splits = []
+        for s in splits:
+            if len(s) <= chunk_size:
+                new_splits.append(s)
+            else:
+                parts = s.split(sep)
+                current = ""
+                for part in parts:
+                    combined = current + (sep if current else "") + part
+                    if len(combined) > chunk_size:
+                        if current.strip():
+                            new_splits.append(current.rstrip())
+                        # Start next chunk with overlap from end of previous
+                        start_overlap = max(0, len(current) - overlap)
+                        current = current[start_overlap:]
+                        if len(current) + len(sep) + len(part) > chunk_size * 2:
+                            # Force-split extremely large segments
+                            if current.rstrip():
+                                new_splits.append(current.rstrip())
+                            current = part
+                        else:
+                            current = current + sep + part if current else part
+                    else:
+                        current = combined
+                if current.strip():
+                    new_splits.append(current.rstrip())
+        splits = new_splits
+
+    return [s for s in splits if len(s.strip()) >= 50]
+
 
 def load_documents() -> list[dict]:
-    """
-    Đọc toàn bộ markdown files từ data/standardized/.
-
-    Returns:
-        List of {'content': str, 'metadata': {'source': str, 'type': str}}
-    """
-    # TODO: Iterate qua STANDARDIZED_DIR, đọc .md files
-    # documents = []
-    # for md_file in STANDARDIZED_DIR.rglob("*.md"):
-    #     content = md_file.read_text(encoding="utf-8")
-    #     doc_type = "legal" if "legal" in str(md_file) else "news"
-    #     documents.append({
-    #         "content": content,
-    #         "metadata": {"source": md_file.name, "type": doc_type}
-    #     })
-    # return documents
-    raise NotImplementedError("Implement load_documents")
+    documents = []
+    if not STANDARDIZED_DIR.exists():
+        return documents
+    for md_file in sorted(STANDARDIZED_DIR.rglob("*.md")):
+        content = md_file.read_text(encoding="utf-8")
+        doc_type = "legal" if "legal" in str(md_file) else "news"
+        documents.append({
+            "content": content,
+            "metadata": {"source": md_file.name, "type": doc_type}
+        })
+    return documents
 
 
 def chunk_documents(documents: list[dict]) -> list[dict]:
-    """
-    Chunk documents theo strategy đã chọn.
-
-    Returns:
-        List of {'content': str, 'metadata': dict} — mỗi item là 1 chunk
-    """
-    # TODO: Implement chunking
-    #
-    # Ví dụ với RecursiveCharacterTextSplitter:
-    # from langchain_text_splitters import RecursiveCharacterTextSplitter
-    #
-    # splitter = RecursiveCharacterTextSplitter(
-    #     chunk_size=CHUNK_SIZE,
-    #     chunk_overlap=CHUNK_OVERLAP,
-    #     separators=["\n\n", "\n", ". ", " ", ""]
-    # )
-    # chunks = []
-    # for doc in documents:
-    #     splits = splitter.split_text(doc["content"])
-    #     for i, chunk_text in enumerate(splits):
-    #         chunks.append({
-    #             "content": chunk_text,
-    #             "metadata": {**doc["metadata"], "chunk_index": i}
-    #         })
-    # return chunks
-    raise NotImplementedError("Implement chunk_documents")
+    chunks = []
+    for doc in documents:
+        splits = _recursive_split(doc["content"], CHUNK_SIZE, CHUNK_OVERLAP)
+        for i, chunk_text in enumerate(splits):
+            chunks.append({
+                "content": chunk_text,
+                "metadata": {**doc["metadata"], "chunk_index": i}
+            })
+    return chunks
 
 
 def embed_chunks(chunks: list[dict]) -> list[dict]:
-    """
-    Embed toàn bộ chunks bằng model đã chọn.
-
-    Returns:
-        Mỗi chunk dict được thêm key 'embedding': list[float]
-    """
-    # TODO: Implement embedding
-    #
-    # Ví dụ với sentence-transformers:
-    # from sentence_transformers import SentenceTransformer
-    #
-    # model = SentenceTransformer(EMBEDDING_MODEL)
-    # texts = [c["content"] for c in chunks]
-    # embeddings = model.encode(texts, show_progress_bar=True)
-    # for chunk, emb in zip(chunks, embeddings):
-    #     chunk["embedding"] = emb.tolist()
-    # return chunks
-    raise NotImplementedError("Implement embed_chunks")
+    if not chunks:
+        return chunks
+    model = _get_model()
+    texts = [c["content"] for c in chunks]
+    embeddings = model.encode(texts, show_progress_bar=False)
+    for chunk, emb in zip(chunks, embeddings):
+        chunk["embedding"] = emb.tolist()
+    return chunks
 
 
 def index_to_vectorstore(chunks: list[dict]):
-    """
-    Lưu chunks vào vector store đã chọn.
-    """
-    # TODO: Implement indexing
-    #
-    # Ví dụ với Weaviate:
-    # import weaviate
-    # from weaviate.classes.config import Configure, Property, DataType
-    #
-    # client = weaviate.connect_to_local()  # hoặc connect_to_weaviate_cloud()
-    #
-    # # Tạo collection
-    # collection = client.collections.create(
-    #     name="DrugLawDocs",
-    #     vectorizer_config=Configure.Vectorizer.none(),
-    #     properties=[
-    #         Property(name="content", data_type=DataType.TEXT),
-    #         Property(name="source", data_type=DataType.TEXT),
-    #         Property(name="doc_type", data_type=DataType.TEXT),
-    #     ]
-    # )
-    #
-    # # Insert chunks
-    # with collection.batch.dynamic() as batch:
-    #     for chunk in chunks:
-    #         batch.add_object(
-    #             properties={"content": chunk["content"], ...},
-    #             vector=chunk["embedding"]
-    #         )
-    raise NotImplementedError("Implement index_to_vectorstore")
+    global _indexed_chunks
+    _indexed_chunks = chunks
+    _save_index()
+
+
+def get_indexed_chunks() -> list[dict]:
+    global _indexed_chunks
+    if not _indexed_chunks:
+        _load_index()
+    return _indexed_chunks
+
+
+def _save_index():
+    if _indexed_chunks:
+        data = {
+            "chunks": _indexed_chunks,
+            "model": EMBEDDING_MODEL,
+            "dim": EMBEDDING_DIM,
+        }
+        INDEX_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(INDEX_FILE, "wb") as f:
+            pickle.dump(data, f)
+
+
+def _load_index():
+    global _indexed_chunks
+    if INDEX_FILE.exists():
+        try:
+            with open(INDEX_FILE, "rb") as f:
+                data = pickle.load(f)
+            _indexed_chunks = data.get("chunks", [])
+            logger.info("Loaded %d chunks from %s", len(_indexed_chunks), INDEX_FILE)
+        except (pickle.UnpicklingError, EOFError, FileNotFoundError, PermissionError) as e:
+            logger.warning("Failed to load index from %s: %s", INDEX_FILE, e)
+            _indexed_chunks = []
 
 
 def run_pipeline():
